@@ -1,10 +1,7 @@
-from typing import Tuple
-import supervision as sv
+from supervision import sv
 
 
-def get_annotators() -> Tuple[
-    sv.EllipseAnnotator, sv.LabelAnnotator, sv.TriangleAnnotator
-]:
+def get_annotators():
     ellipse_annotator = sv.EllipseAnnotator(
         color=sv.ColorPalette.from_hex(["#00BFFF", "#FF1493", "#FFD700"]), thickness=2
     )
@@ -19,5 +16,5 @@ def get_annotators() -> Tuple[
     return ellipse_annotator, label_annotator, triangle_annotator
 
 
-def get_tracker() -> sv.ByteTrack:
-    return sv.ByteTrack()
+def get_tracker():
+    return sv.ByteTracker()

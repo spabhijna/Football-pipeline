@@ -1,30 +1,22 @@
-from typing import Optional
 import numpy as np
 import cv2
 import supervision as sv
-from ultralytics import YOLO
 from src.soccer import draw_pitch, draw_points_on_pitch
 from src.soccer_pitch import SoccerPitchConfiguration
 from src.view import ViewTransformer
-from src.config import (
-    BALL_POINT_RADIUS,
-    MINI_MAP_POSITION,
-    MINI_MAP_SCALE,
-    MINI_MAP_BORDER_THICKNESS,
-)
 
 # Initialize configuration
 CONFIG = SoccerPitchConfiguration()
 
 
 def create_mini_map(
-    frame: np.ndarray,
-    ball_detections: sv.Detections,
-    players_detections: sv.Detections,
-    referees_detections: sv.Detections,
-    goalkeepers_detections: sv.Detections,
-    keypoint_model: YOLO,
-) -> Optional[np.ndarray]:
+    frame,
+    ball_detections,
+    players_detections,
+    referees_detections,
+    goalkeepers_detections,
+    keypoint_model,
+):
     """Create mini map with pitch and player positions"""
     try:
         # Detect pitch key points
@@ -121,7 +113,7 @@ def create_mini_map(
                 xy=pitch_ball_xy,
                 face_color=sv.Color.WHITE,
                 edge_color=sv.Color.BLACK,
-                radius=BALL_POINT_RADIUS,
+                radius=10,
                 pitch=mini_map,
             )
 
@@ -131,12 +123,7 @@ def create_mini_map(
         return None
 
 
-def overlay_mini_map(
-    main_frame: np.ndarray,
-    mini_map: Optional[np.ndarray],
-    position: str = MINI_MAP_POSITION,
-    scale: float = MINI_MAP_SCALE,
-) -> np.ndarray:
+def overlay_mini_map(main_frame, mini_map, position="bottom_right", scale=0.2):
     """Overlay mini map on the main frame
 
     Args:
@@ -185,7 +172,7 @@ def overlay_mini_map(
     )
 
     # Add border
-    border_thickness = MINI_MAP_BORDER_THICKNESS
+    border_thickness = 2
     cv2.rectangle(
         main_frame,
         (x_offset, y_offset),

@@ -1,10 +1,8 @@
 import os
 import sys
 from pathlib import Path
-from typing import Tuple
 import supervision as sv
 from datetime import datetime
-from ultralytics import YOLO
 
 # Add the project root to Python path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -13,19 +11,24 @@ from src.model import get_models
 from src.team import TeamClassifier, TeamConsistencyTracker
 from src.frame_processor import initialize_frame_processor, process_frame
 from src.annotators import get_annotators, get_tracker
-from src.config import (
-    INPUT_VIDEO_PATH,
-    OUTPUT_DIR,
-    PLAYER_DETECTION_MODEL_PATH,
-    KEYPOINT_MODEL_PATH,
-    BALL_ID,
-    GOALKEEPER_ID,
-    PLAYER_ID,
-    REFEREE_ID,
-)
+
+# Configuration
+INPUT_VIDEO_PATH = "../inputs/121364_0.mp4"
+OUTPUT_DIR = "../outputs"
+MODELS_DIR = "../models"
+
+# Model paths
+PLAYER_DETECTION_MODEL_PATH = f"{MODELS_DIR}/player-detection.pt"
+KEYPOINT_MODEL_PATH = f"{MODELS_DIR}/keypoint-detection.pt"
+
+# Detection class IDs
+BALL_ID = 0
+GOALKEEPER_ID = 1
+PLAYER_ID = 2
+REFEREE_ID = 3
 
 
-def create_output_directory() -> Path:
+def create_output_directory():
     """Create output directory with timestamp"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = Path(OUTPUT_DIR) / f"analysis_{timestamp}"
@@ -33,16 +36,7 @@ def create_output_directory() -> Path:
     return output_path
 
 
-def setup_models_and_annotators() -> Tuple[
-    YOLO,
-    YOLO,
-    "TeamClassifier",
-    sv.ByteTrack,
-    "TeamConsistencyTracker",
-    sv.EllipseAnnotator,
-    sv.LabelAnnotator,
-    sv.TriangleAnnotator,
-]:
+def setup_models_and_annotators():
     """Initialize all models and annotators"""
     print("Loading models...")
 
@@ -78,7 +72,7 @@ def setup_models_and_annotators() -> Tuple[
     )
 
 
-def process_video(input_path: str, output_path: Path) -> Path:
+def process_video(input_path: str, output_path: Path):
     """Process the entire video and save output"""
 
     # Setup models and annotators
@@ -142,7 +136,7 @@ def process_video(input_path: str, output_path: Path) -> Path:
     return output_video_path
 
 
-def main() -> None:
+def main():
     """Main function to run the video analysis pipeline"""
     print("=== Football Video Analysis Pipeline ===")
     print(f"Input video: {INPUT_VIDEO_PATH}")

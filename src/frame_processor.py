@@ -1,15 +1,15 @@
-from typing import Any, Optional
 import numpy as np
 import supervision as sv
-from ultralytics import YOLO
 from src.mini_map import create_mini_map, overlay_mini_map
 from src.utils import resolve_goalkeepers_team_id
-from src.team import TeamClassifier, TeamConsistencyTracker
-from src.config import BALL_ID, GOALKEEPER_ID, PLAYER_ID, REFEREE_ID
 
 # Global variables that need to be set before using process_frame
 PLAYER_DETECTION_MODEL = None
 KEYPOINT_MODEL = None
+BALL_ID = 0
+GOALKEEPER_ID = 1
+PLAYER_ID = 2
+REFEREE_ID = 3
 
 # Global objects that need to be initialized
 tracker = None
@@ -118,26 +118,26 @@ def process_frame(frame: np.ndarray, _) -> np.ndarray:
 
 
 def initialize_frame_processor(
-    player_detection_model: YOLO,
-    keypoint_model: YOLO,
-    tracker_obj: sv.ByteTrack,
-    team_classifier_obj: TeamClassifier,
-    team_tracker_obj: TeamConsistencyTracker,
-    ellipse_ann: sv.EllipseAnnotator,
-    label_ann: sv.LabelAnnotator,
-    triangle_ann: sv.TriangleAnnotator,
-    ball_id: int = BALL_ID,
-    goalkeeper_id: int = GOALKEEPER_ID,
-    player_id: int = PLAYER_ID,
-    referee_id: int = REFEREE_ID,
-) -> None:
+    player_detection_model,
+    keypoint_model,
+    tracker_obj,
+    team_classifier_obj,
+    team_tracker_obj,
+    ellipse_ann,
+    label_ann,
+    triangle_ann,
+    ball_id=0,
+    goalkeeper_id=1,
+    player_id=2,
+    referee_id=3,
+):
     """
     Initialize all global variables needed for frame processing.
 
     Args:
         player_detection_model: YOLO model for player detection
         keypoint_model: YOLO model for keypoint detection
-        tracker_obj: ByteTrack object for tracking
+        tracker_obj: ByteTracker object for tracking
         team_classifier_obj: TeamClassifier object
         team_tracker_obj: Team tracking object for stabilization
         ellipse_ann: EllipseAnnotator for players

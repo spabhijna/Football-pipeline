@@ -8,9 +8,10 @@ import umap
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 from transformers import AutoProcessor, SiglipVisionModel
-from src.config import SIGLIP_MODEL_PATH
 
 V = TypeVar("V")
+
+SIGLIP_MODEL_PATH = "google/siglip-base-patch16-224"
 
 
 def create_batches(
@@ -44,7 +45,7 @@ class TeamClassifier:
     UMAP for dimensionality reduction, and KMeans for clustering.
     """
 
-    def __init__(self, device: str = "cpu", batch_size: int = 32) -> None:
+    def __init__(self, device: str = "cpu", batch_size: int = 32):
         """
         Initialize the TeamClassifier with device and batch size.
 
@@ -116,17 +117,13 @@ class TeamClassifier:
 
 
 class TeamConsistencyTracker:
-    def __init__(
-        self, history_length: int = 10, confidence_threshold: float = 0.7
-    ) -> None:
+    def __init__(self, history_length=10, confidence_threshold=0.7):
         self.history_length = history_length
         self.confidence_threshold = confidence_threshold
         self.player_team_history = defaultdict(list)
         self.team_assignments = {}
 
-    def update_team_assignment(
-        self, tracker_id: int, current_team_prediction: int
-    ) -> int:
+    def update_team_assignment(self, tracker_id, current_team_prediction):
         # Add current prediction to history
         self.player_team_history[tracker_id].append(current_team_prediction)
 
@@ -148,7 +145,7 @@ class TeamConsistencyTracker:
         # If not enough confidence, use current prediction
         return current_team_prediction
 
-    def get_stable_team(self, tracker_id: int, current_team_prediction: int) -> int:
+    def get_stable_team(self, tracker_id, current_team_prediction):
         if tracker_id in self.team_assignments:
             return self.team_assignments[tracker_id]
         return current_team_prediction
