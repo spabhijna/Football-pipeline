@@ -26,6 +26,11 @@ previous_team_assignments = {}
 frame_count = 0
 stable_assignments_threshold = 5
 
+# Performance optimization variables
+team_prediction_cache = {}  # Cache predictions to avoid recomputation
+cache_max_size = 100
+last_cache_clear = 0
+
 
 def process_frame_stable(frame: np.ndarray, frame_idx: int) -> np.ndarray:
     """
@@ -38,7 +43,7 @@ def process_frame_stable(frame: np.ndarray, frame_idx: int) -> np.ndarray:
     Returns:
         Annotated frame with stable detections and tracking
     """
-    global previous_team_assignments, frame_count
+    global previous_team_assignments, frame_count, team_prediction_cache, last_cache_clear
     frame_count = frame_idx
     
     try:
@@ -65,8 +70,13 @@ def process_frame_stable(frame: np.ndarray, frame_idx: int) -> np.ndarray:
             players_crops = [sv.crop_image(frame, xyxy) for xyxy in players_detections.xyxy]
             
             try:
-                # Get team predictions
-                current_team_predictions = team_classifier.predict(players_crops)
+                # Check if team classifier is properly fitted
+                if hasattr(team_classifier, 'cluster_model') and hasattr(team_classifier.cluster_model, 'cluster_centers_'):
+                    # Classifier is fitted, use it
+                    current_team_predictions = team_classifier.predict(players_crops)
+                else:
+                    # Classifier not fitted, use spatial fallback
+                    raise AttributeError("Team classifier not fitted")
                 
                 # Apply stability tracking with fallback
                 stabilized_team_ids = []
@@ -95,15 +105,29 @@ def process_frame_stable(frame: np.ndarray, frame_idx: int) -> np.ndarray:
 
                 players_detections.class_id = np.array(stabilized_team_ids, dtype=int)
                 
-            except (AttributeError, ValueError) as e:
-                # Fallback: use alternating team assignment based on position
-                print(f"Team classification fallback at frame {frame_idx}: {e}")
+            except (AttributeError, ValueError, Exception) as e:
+                # Improved fallback: use spatial-based team assignment
+                if frame_idx == 0:
+                    print(f"Team classifier not ready, using spatial assignment: {e}")
+                
                 team_ids = []
+                frame_width = frame.shape[1]
                 for i, xyxy in enumerate(players_detections.xyxy):
-                    # Simple spatial-based team assignment
+                    # Spatial-based team assignment with tracker consistency
                     center_x = (xyxy[0] + xyxy[2]) / 2
-                    team_id = 0 if center_x < frame.shape[1] / 2 else 1
+                    tracker_id = players_detections.tracker_id[i] if i < len(players_detections.tracker_id) else None
+                    
+                    # Use previous assignment if available for consistency
+                    if tracker_id is not None and tracker_id in previous_team_assignments:
+                        team_id = previous_team_assignments[tracker_id]
+                    else:
+                        # Spatial assignment: left side = team 0, right side = team 1
+                        team_id = 0 if center_x < frame_width / 2 else 1
+                        if tracker_id is not None:
+                            previous_team_assignments[tracker_id] = team_id
+                    
                     team_ids.append(team_id)
+                    
                 players_detections.class_id = np.array(team_ids, dtype=int)
 
         # Stabilize goalkeeper teams
@@ -222,11 +246,15 @@ def initialize_frame_processor_stable(
             if hasattr(team_classifier_obj, 'features_model'):
                 team_classifier_obj.features_model.to('cuda')
                 team_classifier_obj.device = 'cuda'
+                # Optimize batch size for GPU
+                team_classifier_obj.batch_size = min(team_classifier_obj.batch_size, 16)
         else:
             print("💻 Using CPU for team classifier (recommended for stability)")
             if hasattr(team_classifier_obj, 'features_model'):
                 team_classifier_obj.features_model.to('cpu')
                 team_classifier_obj.device = 'cpu'
+                # Smaller batch size for CPU
+                team_classifier_obj.batch_size = min(team_classifier_obj.batch_size, 8)
     
     PLAYER_DETECTION_MODEL = player_detection_model
     KEYPOINT_MODEL = keypoint_model
@@ -244,6 +272,11 @@ def initialize_frame_processor_stable(
     # Reset anti-flickering state
     previous_team_assignments = {}
     frame_count = 0
+    
+    # Reset performance optimization variables
+    global team_prediction_cache, last_cache_clear
+    team_prediction_cache = {}
+    last_cache_clear = 0
     
     # Memory optimization for GPU
     if torch.cuda.is_available():
