@@ -1,0 +1,253 @@
+"""
+Improved frame processor for Colab to reduce video flickering
+"""
+
+from typing import Any, Optional
+import numpy as np
+import supervision as sv
+from ultralytics import YOLO
+from src.mini_map import create_mini_map, overlay_mini_map
+from src.utils import resolve_goalkeepers_team_id
+from src.team import TeamClassifier, TeamConsistencyTracker
+from src.config import BALL_ID, GOALKEEPER_ID, PLAYER_ID, REFEREE_ID
+
+# Global variables for frame processing state
+PLAYER_DETECTION_MODEL = None
+KEYPOINT_MODEL = None
+tracker = None
+team_classifier = None
+team_tracker = None
+ellipse_annotator = None
+label_annotator = None
+triangle_annotator = None
+
+# Anti-flickering state variables
+previous_team_assignments = {}
+frame_count = 0
+stable_assignments_threshold = 5
+
+
+def process_frame_stable(frame: np.ndarray, frame_idx: int) -> np.ndarray:
+    """
+    Process a single frame with anti-flickering improvements for Colab.
+    
+    Args:
+        frame: Input video frame
+        frame_idx: Frame index for tracking
+        
+    Returns:
+        Annotated frame with stable detections and tracking
+    """
+    global previous_team_assignments, frame_count
+    frame_count = frame_idx
+    
+    try:
+        # Run inference for player detection with slightly higher confidence
+        result = PLAYER_DETECTION_MODEL.predict(frame, conf=0.4, verbose=False)[0]
+        detections = sv.Detections.from_ultralytics(result)
+
+        # Process ball detections
+        ball_detections = detections[detections.class_id == BALL_ID]
+        ball_detections.xyxy = sv.pad_boxes(xyxy=ball_detections.xyxy, px=10)
+
+        # Process other detections with improved NMS
+        all_detections = detections[detections.class_id != BALL_ID]
+        all_detections = all_detections.with_nms(threshold=0.3, class_agnostic=True)  # Stricter NMS
+        all_detections = tracker.update_with_detections(detections=all_detections)
+
+        # Separate different object types
+        goalkeepers_detections = all_detections[all_detections.class_id == GOALKEEPER_ID]
+        players_detections = all_detections[all_detections.class_id == PLAYER_ID]
+        referees_detections = all_detections[all_detections.class_id == REFEREE_ID]
+
+        # Improved team assignment with stability checks
+        if len(players_detections) > 0:
+            players_crops = [sv.crop_image(frame, xyxy) for xyxy in players_detections.xyxy]
+            
+            try:
+                # Get team predictions
+                current_team_predictions = team_classifier.predict(players_crops)
+                
+                # Apply stability tracking with fallback
+                stabilized_team_ids = []
+                for i, tracker_id in enumerate(players_detections.tracker_id):
+                    if tracker_id is not None:
+                        # Use team tracker for consistency
+                        stabilized_team = team_tracker.update_team_assignment(
+                            tracker_id, current_team_predictions[i]
+                        )
+                        
+                        # Additional stability check: avoid rapid changes
+                        if tracker_id in previous_team_assignments:
+                            if frame_idx < stable_assignments_threshold:
+                                # Keep previous assignment for very early frames
+                                stabilized_team = previous_team_assignments[tracker_id]
+                            elif abs(stabilized_team - previous_team_assignments[tracker_id]) > 0:
+                                # Team changed - apply additional verification
+                                if frame_idx % 10 != 0:  # Only allow changes every 10 frames
+                                    stabilized_team = previous_team_assignments[tracker_id]
+                        
+                        previous_team_assignments[tracker_id] = stabilized_team
+                        stabilized_team_ids.append(stabilized_team)
+                    else:
+                        # No tracker ID - use current prediction
+                        stabilized_team_ids.append(current_team_predictions[i])
+
+                players_detections.class_id = np.array(stabilized_team_ids, dtype=int)
+                
+            except (AttributeError, ValueError) as e:
+                # Fallback: use alternating team assignment based on position
+                print(f"Team classification fallback at frame {frame_idx}: {e}")
+                team_ids = []
+                for i, xyxy in enumerate(players_detections.xyxy):
+                    # Simple spatial-based team assignment
+                    center_x = (xyxy[0] + xyxy[2]) / 2
+                    team_id = 0 if center_x < frame.shape[1] / 2 else 1
+                    team_ids.append(team_id)
+                players_detections.class_id = np.array(team_ids, dtype=int)
+
+        # Stabilize goalkeeper teams
+        if len(goalkeepers_detections) > 0:
+            goalkeepers_detections.class_id = resolve_goalkeepers_team_id(
+                players_detections, goalkeepers_detections
+            )
+
+        # Handle referees
+        if len(referees_detections) > 0:
+            referees_detections.class_id = np.full(len(referees_detections), 2, dtype=int)
+
+        # Merge all detections
+        all_detections = sv.Detections.merge(
+            [players_detections, goalkeepers_detections, referees_detections]
+        )
+
+        # Create stable labels
+        labels = []
+        for tracker_id in all_detections.tracker_id:
+            if tracker_id is not None:
+                labels.append(f"#{tracker_id}")
+            else:
+                labels.append("?")
+
+        # Ensure class_id is integer
+        all_detections.class_id = all_detections.class_id.astype(int)
+
+        # Annotate main frame
+        annotated_frame = frame.copy()
+        
+        # Apply annotations with error handling
+        try:
+            annotated_frame = ellipse_annotator.annotate(
+                scene=annotated_frame, detections=all_detections
+            )
+            annotated_frame = label_annotator.annotate(
+                scene=annotated_frame, detections=all_detections, labels=labels
+            )
+            annotated_frame = triangle_annotator.annotate(
+                scene=annotated_frame, detections=ball_detections
+            )
+        except Exception as e:
+            print(f"Annotation error at frame {frame_idx}: {e}")
+            # Continue with basic frame if annotation fails
+
+        # Create and overlay mini map with error handling
+        try:
+            mini_map = create_mini_map(
+                frame,
+                ball_detections,
+                players_detections,
+                referees_detections,
+                goalkeepers_detections,
+                KEYPOINT_MODEL,
+            )
+            if mini_map is not None:
+                annotated_frame = overlay_mini_map(
+                    annotated_frame, mini_map, position="bottom_right", scale=0.2
+                )
+        except Exception as e:
+            print(f"Mini-map error at frame {frame_idx}: {e}")
+            # Continue without mini-map if it fails
+
+        return annotated_frame
+
+    except Exception as e:
+        print(f"Critical error processing frame {frame_idx}: {e}")
+        return frame  # Return original frame on critical error
+
+
+def initialize_frame_processor_stable(
+    player_detection_model: YOLO,
+    keypoint_model: YOLO,
+    tracker_obj: sv.ByteTrack,
+    team_classifier_obj: TeamClassifier,
+    team_tracker_obj: TeamConsistencyTracker,
+    ellipse_ann: sv.EllipseAnnotator,
+    label_ann: sv.LabelAnnotator,
+    triangle_ann: sv.TriangleAnnotator,
+    ball_id: int = BALL_ID,
+    goalkeeper_id: int = GOALKEEPER_ID,
+    player_id: int = PLAYER_ID,
+    referee_id: int = REFEREE_ID,
+    use_gpu_for_detection: bool = True,
+    use_gpu_for_team_classifier: bool = False,
+) -> None:
+    """
+    Initialize all global variables for stable frame processing in Colab.
+    
+    Args:
+        use_gpu_for_detection: Use GPU for YOLO models (recommended: True)
+        use_gpu_for_team_classifier: Use GPU for team classifier (recommended: False for stability)
+    """
+    global PLAYER_DETECTION_MODEL, KEYPOINT_MODEL, tracker, team_classifier, team_tracker
+    global ellipse_annotator, label_annotator, triangle_annotator
+    global BALL_ID, GOALKEEPER_ID, PLAYER_ID, REFEREE_ID
+    global previous_team_assignments, frame_count
+    
+    import torch
+    
+    # Configure YOLO models for GPU/CPU
+    if use_gpu_for_detection and torch.cuda.is_available():
+        print("🚀 Using GPU for YOLO detection models")
+        player_detection_model.to('cuda')
+        keypoint_model.to('cuda')
+    else:
+        print("💻 Using CPU for YOLO detection models")
+        player_detection_model.to('cpu')
+        keypoint_model.to('cpu')
+    
+    # Team classifier device management
+    if hasattr(team_classifier_obj, 'device'):
+        if use_gpu_for_team_classifier and torch.cuda.is_available():
+            print("🚀 Using GPU for team classifier")
+            if hasattr(team_classifier_obj, 'features_model'):
+                team_classifier_obj.features_model.to('cuda')
+                team_classifier_obj.device = 'cuda'
+        else:
+            print("💻 Using CPU for team classifier (recommended for stability)")
+            if hasattr(team_classifier_obj, 'features_model'):
+                team_classifier_obj.features_model.to('cpu')
+                team_classifier_obj.device = 'cpu'
+    
+    PLAYER_DETECTION_MODEL = player_detection_model
+    KEYPOINT_MODEL = keypoint_model
+    tracker = tracker_obj
+    team_classifier = team_classifier_obj
+    team_tracker = team_tracker_obj
+    ellipse_annotator = ellipse_ann
+    label_annotator = label_ann
+    triangle_annotator = triangle_ann
+    BALL_ID = ball_id
+    GOALKEEPER_ID = goalkeeper_id
+    PLAYER_ID = player_id
+    REFEREE_ID = referee_id
+    
+    # Reset anti-flickering state
+    previous_team_assignments = {}
+    frame_count = 0
+    
+    # Memory optimization for GPU
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        print(f"📊 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+    
+    print("✅ Stable frame processor initialized for Colab")
