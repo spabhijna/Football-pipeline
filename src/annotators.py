@@ -17,4 +17,4 @@ def get_annotators():
 
 
 def get_tracker():
-    return sv.ByteTracker()
+    return sv.ByteTrack()

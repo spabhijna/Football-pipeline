@@ -13,7 +13,7 @@ from src.frame_processor import initialize_frame_processor, process_frame
 from src.annotators import get_annotators, get_tracker
 
 # Configuration
-INPUT_VIDEO_PATH = "../inputs/121364_0.mp4"
+INPUT_VIDEO_PATH = "../inputs/test-input.mp4"
 OUTPUT_DIR = "../outputs"
 MODELS_DIR = "../models"
 

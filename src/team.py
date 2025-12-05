@@ -191,9 +191,9 @@ class TeamConsistencyTracker:
         # Get most common team in history
         history = self.player_team_history[tracker_id]
         if len(history) >= 3:  # Wait for some history to accumulate
-            team_counts = np.bincount(history)
-            most_common_team = np.argmax(team_counts)
-            confidence = team_counts[most_common_team] / len(history)
+            team_counts = np.bincount(history)   # Count occurrences: [team_0_count, team_1_count]
+            most_common_team = np.argmax(team_counts) # Get team with most votes
+            confidence = team_counts[most_common_team] / len(history) # Calculate confidence
 
             if confidence >= self.confidence_threshold:
                 self.team_assignments[tracker_id] = most_common_team
