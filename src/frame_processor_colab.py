@@ -342,6 +342,6 @@ def initialize_frame_processor_stable(
     # Memory optimization for GPU
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-        print(f"📊 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")t 
+        print(f"📊 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
     
     print("✅ Stable frame processor initialized for Colab")
