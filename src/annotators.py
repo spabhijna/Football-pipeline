@@ -1,4 +1,4 @@
-from supervision import sv
+import supervision as sv
 
 
 def get_annotators():
