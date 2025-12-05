@@ -1,5 +1,6 @@
 from typing import Generator, Iterable, List, TypeVar
 from collections import defaultdict
+import os
 
 import numpy as np
 import supervision as sv
@@ -8,10 +9,52 @@ import umap
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 from transformers import AutoProcessor, SiglipVisionModel
+from huggingface_hub import login
 
 V = TypeVar("V")
 
 SIGLIP_MODEL_PATH = "google/siglip-base-patch16-224"
+
+
+def setup_hf_authentication():
+    """
+    Setup Hugging Face authentication for Google Colab and other environments.
+    
+    This function checks for HF token in multiple ways:
+    1. Environment variable HF_TOKEN
+    2. Google Colab userdata (for Colab environments)
+    3. Manual input prompt
+    """
+    hf_token = None
+    
+    # Try to get token from environment variable
+    hf_token = os.getenv('HF_TOKEN')
+    
+    # If not found and running in Colab, try to get from userdata
+    if hf_token is None:
+        try:
+            from google.colab import userdata
+            hf_token = userdata.get('HF_TOKEN')
+            print("✅ Found HF token in Colab userdata")
+        except ImportError:
+            # Not in Colab environment
+            pass
+        except Exception as e:
+            print(f"⚠️ Could not access Colab userdata: {e}")
+    
+    # If still not found, check if we can access the model without token
+    if hf_token is None:
+        print("ℹ️ No HF token found, trying to access model without authentication...")
+        return False
+    
+    # Login with the token
+    try:
+        login(token=hf_token, add_to_git_credential=True)
+        print("✅ Successfully authenticated with Hugging Face")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to authenticate with Hugging Face: {e}")
+        return False
 
 
 def create_batches(
@@ -45,20 +88,34 @@ class TeamClassifier:
     UMAP for dimensionality reduction, and KMeans for clustering.
     """
 
-    def __init__(self, device: str = "cpu", batch_size: int = 32):
+    def __init__(self, device: str = "cpu", batch_size: int = 32, use_auth: bool = False):
         """
         Initialize the TeamClassifier with device and batch size.
 
         Args:
             device (str): The device to run the model on ('cpu' or 'cuda').
             batch_size (int): The batch size for processing images.
+            use_auth (bool): Whether to attempt HF authentication (useful for Colab).
         """
         self.device = device
         self.batch_size = batch_size
-        self.features_model = SiglipVisionModel.from_pretrained(SIGLIP_MODEL_PATH).to(
-            device
-        )
-        self.processor = AutoProcessor.from_pretrained(SIGLIP_MODEL_PATH)
+        
+        # Setup HF authentication if requested
+        if use_auth:
+            setup_hf_authentication()
+        
+        # Load the model and processor
+        try:
+            print(f"🔄 Loading SigLIP model: {SIGLIP_MODEL_PATH}")
+            self.features_model = SiglipVisionModel.from_pretrained(SIGLIP_MODEL_PATH).to(device)
+            self.processor = AutoProcessor.from_pretrained(SIGLIP_MODEL_PATH)
+            print("✅ SigLIP model loaded successfully!")
+        except Exception as e:
+            print(f"❌ Failed to load SigLIP model: {e}")
+            print("💡 If you're in Colab, make sure to set your HF_TOKEN in Colab secrets")
+            print("   Go to: Runtime → Manage Sessions → Secrets → Add HF_TOKEN")
+            raise
+            
         self.reducer = umap.UMAP(n_components=3)
         self.cluster_model = KMeans(n_clusters=2)
 
