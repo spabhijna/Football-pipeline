@@ -52,12 +52,7 @@ def process_frame(frame: np.ndarray, _) -> np.ndarray:
     # Team assignment with stabilization
     players_crops = [sv.crop_image(frame, xyxy) for xyxy in players_detections.xyxy]
     if players_crops:
-        try:
-            current_team_predictions = team_classifier.predict(players_crops)
-        except (AttributeError, ValueError):
-            # Fallback to random team assignment if classifier is not fitted
-            current_team_predictions = np.random.choice([0, 1], size=len(players_crops))
-
+        current_team_predictions = team_classifier.predict(players_crops)
         # Apply team consistency tracking
         stabilized_team_ids = []
         for i, tracker_id in enumerate(players_detections.tracker_id):
@@ -71,20 +66,35 @@ def process_frame(frame: np.ndarray, _) -> np.ndarray:
 
         players_detections.class_id = np.array(stabilized_team_ids)
 
-    # Stabilize goalkeeper teams
+    # Stabilize goalkeeper teams - assign team IDs (0 or 1) to goalkeepers
     goalkeepers_detections.class_id = resolve_goalkeepers_team_id(
         players_detections, goalkeepers_detections
     )
+    
+    # Create mini map BEFORE modifying referee class_ids
+    # At this point: players have team IDs (0/1), goalkeepers have team IDs (0/1)
+    mini_map = create_mini_map(
+        frame,
+        ball_detections,
+        players_detections,
+        referees_detections,
+        goalkeepers_detections,
+        KEYPOINT_MODEL
+    )
 
-    if len(referees_detections) > 0:
-        referees_detections.class_id = np.full(len(referees_detections), 2)
+    # Now adjust referee class_id for display purposes
+    referees_detections.class_id -= 1
 
     all_detections = sv.Detections.merge(
         [players_detections, goalkeepers_detections, referees_detections]
     )
 
     # Create labels
-    labels = [f"#{tracker_id}" for tracker_id in all_detections.tracker_id]
+    labels = [
+        f"#{tracker_id}" 
+        for tracker_id in 
+        all_detections.tracker_id
+        ]
 
     all_detections.class_id = all_detections.class_id.astype(int)
 
@@ -100,15 +110,7 @@ def process_frame(frame: np.ndarray, _) -> np.ndarray:
         scene=annotated_frame, detections=ball_detections
     )
 
-    # Create and overlay mini map
-    mini_map = create_mini_map(
-        frame,
-        ball_detections,
-        players_detections,
-        referees_detections,
-        goalkeepers_detections,
-        KEYPOINT_MODEL,
-    )
+    # Overlay mini map (already created before referee class_id adjustment)
     if mini_map is not None:
         annotated_frame = overlay_mini_map(
             annotated_frame, mini_map, position="bottom_right", scale=0.2

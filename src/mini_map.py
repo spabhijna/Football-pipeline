@@ -15,7 +15,7 @@ def create_mini_map(
     players_detections,
     referees_detections,
     goalkeepers_detections,
-    keypoint_model,
+    keypoint_model
 ):
     """Create mini map with pitch and player positions"""
     try:
@@ -32,39 +32,20 @@ def create_mini_map(
         pitch_reference_points = np.array(CONFIG.vertices)[filter]
 
         transformer = ViewTransformer(
-            source=frame_reference_points, target=pitch_reference_points
+            source=frame_reference_points,
+            target=pitch_reference_points
         )
 
         # Transform positions to pitch coordinates
-        frame_ball_xy = ball_detections.get_anchors_coordinates(
-            sv.Position.BOTTOM_CENTER
-        )
-        pitch_ball_xy = (
-            transformer.transform_points(points=frame_ball_xy)
-            if len(frame_ball_xy) > 0
-            else np.array([])
-        )
+        frame_ball_xy = ball_detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
+        pitch_ball_xy = transformer.transform_points(points=frame_ball_xy) if len(frame_ball_xy) > 0 else np.array([])
 
-        all_players_detections = sv.Detections.merge(
-            [players_detections, goalkeepers_detections]
-        )
-        players_xy = all_players_detections.get_anchors_coordinates(
-            sv.Position.BOTTOM_CENTER
-        )
-        pitch_players_xy = (
-            transformer.transform_points(points=players_xy)
-            if len(players_xy) > 0
-            else np.array([])
-        )
+        all_players_detections = sv.Detections.merge([players_detections, goalkeepers_detections])
+        players_xy = all_players_detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
+        pitch_players_xy = transformer.transform_points(points=players_xy) if len(players_xy) > 0 else np.array([])
 
-        referees_xy = referees_detections.get_anchors_coordinates(
-            sv.Position.BOTTOM_CENTER
-        )
-        pitch_referees_xy = (
-            transformer.transform_points(points=referees_xy)
-            if len(referees_xy) > 0
-            else np.array([])
-        )
+        referees_xy = referees_detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
+        pitch_referees_xy = transformer.transform_points(points=referees_xy) if len(referees_xy) > 0 else np.array([])
 
         # Create mini map
         mini_map = draw_pitch(CONFIG)
@@ -76,11 +57,10 @@ def create_mini_map(
                 mini_map = draw_points_on_pitch(
                     config=CONFIG,
                     xy=pitch_players_xy[team_0_mask],
-                    face_color=sv.Color.from_hex("00BFFF"),
+                    face_color=sv.Color.from_hex('00BFFF'),
                     edge_color=sv.Color.BLACK,
                     radius=16,
-                    pitch=mini_map,
-                )
+                    pitch=mini_map)
 
         # Draw players (team 1 - pink)
         if len(pitch_players_xy) > 0:
@@ -89,11 +69,35 @@ def create_mini_map(
                 mini_map = draw_points_on_pitch(
                     config=CONFIG,
                     xy=pitch_players_xy[team_1_mask],
-                    face_color=sv.Color.from_hex("FF1493"),
+                    face_color=sv.Color.from_hex('FF1493'),
                     edge_color=sv.Color.BLACK,
                     radius=16,
-                    pitch=mini_map,
-                )
+                    pitch=mini_map)
+
+        # Draw referees (yellow)
+        if len(pitch_referees_xy) > 0:
+            mini_map = draw_points_on_pitch(
+                config=CONFIG,
+                xy=pitch_referees_xy,
+                face_color=sv.Color.from_hex('FFD700'),
+                edge_color=sv.Color.BLACK,
+                radius=16,
+                pitch=mini_map)
+
+        # Draw ball (white)
+        if len(pitch_ball_xy) > 0:
+            mini_map = draw_points_on_pitch(
+                config=CONFIG,
+                xy=pitch_ball_xy,
+                face_color=sv.Color.WHITE,
+                edge_color=sv.Color.BLACK,
+                radius=10,
+                pitch=mini_map)
+
+        return mini_map
+    except Exception as e:
+        print(f"Error creating mini map: {e}")
+        return None
 
         # Draw referees (yellow)
         if len(pitch_referees_xy) > 0:
@@ -118,23 +122,18 @@ def create_mini_map(
             )
 
         return mini_map
+    except ValueError:
+        # Homography computation failed (not enough keypoints, etc.)
+        return None
     except Exception as e:
         print(f"Error creating mini map: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
-def overlay_mini_map(main_frame, mini_map, position="bottom_right", scale=0.2):
-    """Overlay mini map on the main frame
-
-    Args:
-        main_frame: Main video frame to overlay the mini map on
-        mini_map: Mini map to overlay (tactical view)
-        position: Position of overlay ('bottom_right', 'bottom_left', 'top_right', 'top_left')
-        scale: Scale factor for mini map size relative to main frame width
-
-    Returns:
-        main_frame with mini map overlaid
-    """
+def overlay_mini_map(main_frame, mini_map, position='bottom_right', scale=0.2):
+    """Overlay mini map on the main frame"""
     if mini_map is None:
         return main_frame
 
