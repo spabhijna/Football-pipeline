@@ -5,25 +5,16 @@ import supervision as sv
 import numpy as np
 
 from .soccer_pitch import SoccerPitchConfiguration
-from .config import (
-    PITCH_PADDING,
-    PITCH_SCALE,
-    PITCH_LINE_THICKNESS,
-    PITCH_POINT_RADIUS,
-    PLAYER_POINT_RADIUS,
-    PLAYER_POINT_THICKNESS,
-    PATH_THICKNESS,
-)
 
 
 def draw_pitch(
     config: SoccerPitchConfiguration,
-    background_color: sv.Color = sv.Color(34, 139, 34),
-    line_color: sv.Color = sv.Color.WHITE,
-    padding: int = PITCH_PADDING,
-    line_thickness: int = PITCH_LINE_THICKNESS,
-    point_radius: int = PITCH_POINT_RADIUS,
-    scale: float = PITCH_SCALE,
+    background_color: sv.Color = sv.Color(34, 139, 34),  # Dark Green Colour for pitch
+    line_color: sv.Color = sv.Color.WHITE,  # White colour for edges
+    padding: int = 50,
+    line_thickness: int = 4,
+    point_radius: int = 8,
+    scale: float = 0.1,
 ) -> np.ndarray:
     """
     Draws a soccer pitch with specified dimensions, colors, and scale.
@@ -47,15 +38,27 @@ def draw_pitch(
     Returns:
         np.ndarray: Image of the soccer pitch.
     """
-    scaled_width = int(config.width * scale)
-    scaled_length = int(config.length * scale)
+
+    # Scale the real-world dimensions
+    # int is used because OpenCV works integer pixels
+    scaled_width = int(config.width * scale)  # 7000 cm → 700 px @ scale=0.1
+    scaled_length = int(config.length * scale)  # 12000 cm → 1200 px
     scaled_circle_radius = int(config.centre_circle_radius * scale)
     scaled_penalty_spot_distance = int(config.penalty_spot_distance * scale)
 
+    # Create a blank Canvas
     pitch_image = np.ones(
-        (scaled_width + 2 * padding, scaled_length + 2 * padding, 3), dtype=np.uint8
-    ) * np.array(background_color.as_bgr(), dtype=np.uint8)
+        (
+            scaled_width + 2 * padding,  # Height of the Image
+            scaled_length + 2 * padding,  # Width of the Image
+            3,
+        ),  # 3 Channels (BGR)
+        dtype=np.uint8,
+    ) * np.array(
+        background_color.as_bgr(), dtype=np.uint8
+    )  # multiplying fills the canvas with green colour
 
+    # Draw every edge (line segment)
     for start, end in config.edges:
         point1 = (
             int(config.vertices[start - 1][0] * scale) + padding,
@@ -73,6 +76,7 @@ def draw_pitch(
             thickness=line_thickness,
         )
 
+    # Centre Circle
     centre_circle_center = (scaled_length // 2 + padding, scaled_width // 2 + padding)
     cv2.circle(
         img=pitch_image,
@@ -82,6 +86,7 @@ def draw_pitch(
         thickness=line_thickness,
     )
 
+    # Penalty spots (filled circles)
     penalty_spots = [
         (scaled_penalty_spot_distance + padding, scaled_width // 2 + padding),
         (
@@ -106,10 +111,10 @@ def draw_points_on_pitch(
     xy: np.ndarray,
     face_color: sv.Color = sv.Color.RED,
     edge_color: sv.Color = sv.Color.BLACK,
-    radius: int = PLAYER_POINT_RADIUS,
-    thickness: int = PLAYER_POINT_THICKNESS,
-    padding: int = PITCH_PADDING,
-    scale: float = PITCH_SCALE,
+    radius: int = 10,
+    thickness: int = 2,
+    padding: int = 50,
+    scale: float = 0.1,
     pitch: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
@@ -168,9 +173,9 @@ def draw_paths_on_pitch(
     config: SoccerPitchConfiguration,
     paths: List[np.ndarray],
     color: sv.Color = sv.Color.WHITE,
-    thickness: int = PATH_THICKNESS,
-    padding: int = PITCH_PADDING,
-    scale: float = PITCH_SCALE,
+    thickness: int = 2,
+    padding: int = 50,
+    scale: float = 0.1,
     pitch: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
@@ -218,5 +223,3 @@ def draw_paths_on_pitch(
             )
 
         return pitch
-
-

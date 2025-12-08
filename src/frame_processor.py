@@ -70,7 +70,7 @@ def process_frame(frame: np.ndarray, _) -> np.ndarray:
     goalkeepers_detections.class_id = resolve_goalkeepers_team_id(
         players_detections, goalkeepers_detections
     )
-    
+
     # Create mini map BEFORE modifying referee class_ids
     # At this point: players have team IDs (0/1), goalkeepers have team IDs (0/1)
     mini_map = create_mini_map(
@@ -79,7 +79,7 @@ def process_frame(frame: np.ndarray, _) -> np.ndarray:
         players_detections,
         referees_detections,
         goalkeepers_detections,
-        KEYPOINT_MODEL
+        KEYPOINT_MODEL,
     )
 
     # Now adjust referee class_id for display purposes
@@ -90,11 +90,7 @@ def process_frame(frame: np.ndarray, _) -> np.ndarray:
     )
 
     # Create labels
-    labels = [
-        f"#{tracker_id}" 
-        for tracker_id in 
-        all_detections.tracker_id
-        ]
+    labels = [f"#{tracker_id}" for tracker_id in all_detections.tracker_id]
 
     all_detections.class_id = all_detections.class_id.astype(int)
 

@@ -58,7 +58,7 @@ def setup_models_and_annotators():
     ellipse_annotator, label_annotator, triangle_annotator = get_annotators()
     # Setup annotators
 
-    print("✅ Models and annotators loaded successfully!")
+    print("Models and annotators loaded successfully!")
 
     return (
         player_detection_model,
@@ -72,37 +72,39 @@ def setup_models_and_annotators():
     )
 
 
-def collect_initial_crops(input_path: str, player_detection_model, num_frames: int = 10):
+def collect_initial_crops(
+    input_path: str, player_detection_model, num_frames: int = 10
+):
     """
     Collect player crops from initial frames to train the team classifier.
-    
+
     Args:
         input_path: Path to input video
         player_detection_model: YOLO model for player detection
         num_frames: Number of frames to sample
-        
+
     Returns:
         List of player crops
     """
     crops = []
     frame_generator = sv.get_video_frames_generator(input_path)
-    
+
     for frame_idx, frame in enumerate(frame_generator):
         if frame_idx >= num_frames:
             break
-            
+
         # Run inference
         result = player_detection_model.predict(frame, conf=0.3, verbose=False)[0]
         detections = sv.Detections.from_ultralytics(result)
-        
+
         # Get player detections
         players_detections = detections[detections.class_id == PLAYER_ID]
-        
+
         # Crop players
         for xyxy in players_detections.xyxy:
             crop = sv.crop_image(frame, xyxy)
             crops.append(crop)
-    
+
     return crops
 
 
@@ -122,23 +124,27 @@ def process_video(input_path: str, output_path: Path):
     ) = setup_models_and_annotators()
 
     print(f"Processing video: {input_path}")
-    
+
     # Get video info
     video_info = sv.VideoInfo.from_video_path(input_path)
     print(
         f"Video info: {video_info.width}x{video_info.height}, {video_info.fps}fps, {video_info.total_frames} frames"
     )
-    
+
     # Collect initial crops and train team classifier
     print("Collecting initial player crops for team classification...")
-    initial_crops = collect_initial_crops(input_path, player_detection_model, num_frames=10)
-    
+    initial_crops = collect_initial_crops(
+        input_path, player_detection_model, num_frames=10
+    )
+
     if len(initial_crops) < 2:
-        print("⚠️  Warning: Not enough players detected in initial frames. Team classification may not work properly.")
+        print(
+            "Warning: Not enough players detected in initial frames. Team classification may not work properly."
+        )
     else:
         print(f"Training team classifier on {len(initial_crops)} player crops...")
         team_classifier.fit(initial_crops)
-        print("✅ Team classifier trained!")
+        print("Team classifier trained!")
 
     # Initialize frame processor
     initialize_frame_processor(
@@ -177,7 +183,7 @@ def process_video(input_path: str, output_path: Path):
                     f"Progress: {progress:.1f}% ({frame_idx + 1}/{video_info.total_frames} frames)"
                 )
 
-    print(f"✅ Video processing completed! Output saved to: {output_video_path}")
+    print(f"Video processing completed! Output saved to: {output_video_path}")
     return output_video_path
 
 
@@ -188,7 +194,7 @@ def main():
 
     # Check if input video exists
     if not os.path.exists(INPUT_VIDEO_PATH):
-        print(f"❌ Error: Input video not found at {INPUT_VIDEO_PATH}")
+        print(f"Error: Input video not found at {INPUT_VIDEO_PATH}")
         return
 
     # Create output directory
@@ -199,18 +205,18 @@ def main():
         # Process the video
         output_video_path = process_video(INPUT_VIDEO_PATH, output_dir)
 
-        print("\n=== Processing Complete ===")
-        print(f"📹 Processed video: {output_video_path}")
-        print(f"📁 Output directory: {output_dir}")
+        print("\=== Processing Complete ===")
+        print(f"Processed video: {output_video_path}")
+        print(f"Output directory: {output_dir}")
         print("\nFeatures applied:")
-        print("  ✅ Player detection and tracking")
-        print("  ✅ Ball detection")
-        print("  ✅ Team classification")
-        print("  ✅ Tactical mini-map overlay")
-        print("  ✅ Real-time annotations")
+        print("Player detection and tracking")
+        print("Ball detection")
+        print("Team classification")
+        print("Tactical mini-map overlay")
+        print("Real-time annotations")
 
     except Exception as e:
-        print(f"❌ Error during processing: {e}")
+        print(f"Error during processing: {e}")
         raise
 
 

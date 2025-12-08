@@ -43,18 +43,20 @@ class TeamClassifier:
     A classifier that uses a pre-trained SiglipVisionModel for feature extraction,
     UMAP for dimensionality reduction, and KMeans for clustering.
     """
-    def __init__(self, device: str = 'cpu', batch_size: int = 32):
-        """
-       Initialize the TeamClassifier with device and batch size.
 
-       Args:
-           device (str): The device to run the model on ('cpu' or 'cuda').
-           batch_size (int): The batch size for processing images.
-       """
+    def __init__(self, device: str = "cpu", batch_size: int = 32):
+        """
+        Initialize the TeamClassifier with device and batch size.
+
+        Args:
+            device (str): The device to run the model on ('cpu' or 'cuda').
+            batch_size (int): The batch size for processing images.
+        """
         self.device = device
         self.batch_size = batch_size
-        self.features_model = SiglipVisionModel.from_pretrained(
-            SIGLIP_MODEL_PATH).to(device)
+        self.features_model = SiglipVisionModel.from_pretrained(SIGLIP_MODEL_PATH).to(
+            device
+        )
         self.processor = AutoProcessor.from_pretrained(SIGLIP_MODEL_PATH)
         # Initialize UMAP with parameters that help avoid _raw_data issues
         self.reducer = umap.UMAP(n_components=3, random_state=42)
@@ -76,9 +78,10 @@ class TeamClassifier:
         batches = create_batches(crops, self.batch_size)
         data = []
         with torch.no_grad():
-            for batch in tqdm(batches, desc='Embedding extraction'):
-                inputs = self.processor(
-                    images=batch, return_tensors="pt").to(self.device)
+            for batch in tqdm(batches, desc="Embedding extraction"):
+                inputs = self.processor(images=batch, return_tensors="pt").to(
+                    self.device
+                )
                 outputs = self.features_model(**inputs)
                 embeddings = torch.mean(outputs.last_hidden_state, dim=1).cpu().numpy()
                 data.append(embeddings)
@@ -112,14 +115,15 @@ class TeamClassifier:
             return np.array([])
 
         data = self.extract_features(crops)
-        
+
         # Workaround for UMAP _raw_data attribute error
         # Ensure _raw_data is set if it's missing
-        if not hasattr(self.reducer, '_raw_data') and self.training_data is not None:
+        if not hasattr(self.reducer, "_raw_data") and self.training_data is not None:
             self.reducer._raw_data = self.training_data
-        
+
         projections = self.reducer.transform(data)
         return self.cluster_model.predict(projections)
+
 
 class TeamConsistencyTracker:
     def __init__(self, history_length=10, confidence_threshold=0.7):
@@ -139,9 +143,13 @@ class TeamConsistencyTracker:
         # Get most common team in history
         history = self.player_team_history[tracker_id]
         if len(history) >= 3:  # Wait for some history to accumulate
-            team_counts = np.bincount(history)   # Count occurrences: [team_0_count, team_1_count]
-            most_common_team = np.argmax(team_counts) # Get team with most votes
-            confidence = team_counts[most_common_team] / len(history) # Calculate confidence
+            team_counts = np.bincount(
+                history
+            )  # Count occurrences: [team_0_count, team_1_count]
+            most_common_team = np.argmax(team_counts)  # Get team with most votes
+            confidence = team_counts[most_common_team] / len(
+                history
+            )  # Calculate confidence
 
             if confidence >= self.confidence_threshold:
                 self.team_assignments[tracker_id] = most_common_team
